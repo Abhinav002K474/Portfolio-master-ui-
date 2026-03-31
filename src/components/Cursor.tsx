@@ -47,9 +47,10 @@ export function Cursor() {
         }}
         transition={{ type: "spring", stiffness: 400, damping: 25, mass: 0.1 }}
       />
-      <div 
+      <motion.div 
         className="fixed top-0 left-0 w-2 h-2 bg-white rounded-full z-50 pointer-events-none hidden lg:block mix-blend-difference" 
-        style={{ transform: `translate(${mousePosition.x - 4}px, ${mousePosition.y - 4}px)` }}
+        animate={{ x: mousePosition.x - 4, y: mousePosition.y - 4 }}
+        transition={{ type: "tween", ease: "backOut", duration: 0 }}
       />
     </>
   );
