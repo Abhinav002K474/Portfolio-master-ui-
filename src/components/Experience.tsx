@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 const TIMELINE = [
   {
@@ -24,23 +27,49 @@ const TIMELINE = [
 ];
 
 export function Experience() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+
+    if (lineRef.current && containerRef.current) {
+      gsap.fromTo(lineRef.current, 
+        { height: "0%" },
+        {
+          height: "100%",
+          ease: "none",
+          scrollTrigger: {
+            trigger: containerRef.current,
+            start: "top center",
+            end: "bottom center",
+            scrub: true,
+          }
+        }
+      );
+    }
+  }, []);
+
   return (
-    <section id="experience" className="py-24 relative bg-white/5 border-y border-white/5">
-      <div className="w-full max-w-4xl mx-auto px-6">
+    <section id="experience" className="py-24 relative bg-black/40 backdrop-blur-sm border-y border-white/5">
+      <div className="w-full max-w-4xl mx-auto px-6" ref={containerRef}>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-16"
+          className="text-center mb-16 relative z-10"
         >
           <h2 className="text-3xl md:text-5xl font-bold mb-4">Experience</h2>
           <div className="w-20 h-1 bg-primary mx-auto rounded-full" />
         </motion.div>
 
         <div className="relative">
-          {/* Timeline Line */}
-          <div className="absolute left-[28px] md:left-1/2 top-0 bottom-0 w-0.5 bg-white/10 -translate-x-1/2" />
+          {/* Vertical Container for Timeline Line */}
+          <div className="absolute left-[28px] md:left-1/2 top-0 bottom-0 w-0.5 bg-white/5 -translate-x-1/2 overflow-hidden">
+             {/* The glowing progress line */}
+             <div ref={lineRef} className="w-full bg-primary/80 shadow-[0_0_10px_rgba(79,70,229,0.8)]" />
+          </div>
 
           <div className="space-y-12">
             {TIMELINE.map((item, index) => (
