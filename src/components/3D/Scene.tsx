@@ -1,8 +1,40 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { useEffect } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Environment, PerspectiveCamera } from "@react-three/drei";
 import { Character } from "./Character";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+function CameraController() {
+  const { camera } = useThree();
+
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+    
+    gsap.to(camera.position, {
+      z: 7, 
+      scrollTrigger: {
+        trigger: "#about",
+        start: "top center",
+        scrub: true,
+      },
+    });
+
+    gsap.to(camera.position, {
+      z: 12,
+      y: 2,
+      scrollTrigger: {
+        trigger: "#fullbody",
+        start: "top center",
+        scrub: true, 
+      },
+    });
+  }, [camera]);
+  
+  return null;
+}
 
 export function Scene() {
   return (
@@ -16,8 +48,8 @@ export function Scene() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
         <PerspectiveCamera makeDefault position={[0, 0, 10]} fov={50} />
-
-        {/* 3D Character logic component that listens to scroll and pointer */}
+        
+        <CameraController />
         <Character />
 
         <Environment preset="city" />

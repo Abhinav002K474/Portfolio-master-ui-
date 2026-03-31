@@ -1,102 +1,110 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { useGLTF, useAnimations } from "@react-three/drei";
 import * as THREE from "three";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 export function Character() {
-  const headRef = useRef<THREE.Group>(null);
-  const bodyRef = useRef<THREE.Group>(null);
-  const entireRef = useRef<THREE.Group>(null);
+  const group = useRef<THREE.Group>(null);
+  const { scene, animations } = useGLTF("/models/character.glb");
+  const clone = useMemo(() => scene.clone(), [scene]);
+  const { actions, names } = useAnimations(animations, group);
+  
+  const targetRotation = useRef({ x: 0, y: 0 });
+  const [showAbout, setShowAbout] = useState(false);
   const { viewport } = useThree();
 
-  useFrame((state, delta) => {
-    const scrollY = window.scrollY / (document.body.scrollHeight - window.innerHeight || 1);
-    
-    // Pointer returns -1 to 1 correctly in Fiber
-    const pointerX = state.pointer.x; 
-    const pointerY = state.pointer.y;
+  const headBone = useMemo(() => {
+    let bone: THREE.Bone | undefined;
+    clone.traverse((child) => {
+      if ((child as THREE.Bone).isBone && child.name.toLowerCase().includes('head')) {
+        bone = child as THREE.Bone;
+      }
+    });
+    return bone;
+  }, [clone]);
 
-    // Head Follow
-    if (headRef.current) {
-        const targetHeadX = -pointerY * 0.8;
-        const targetHeadY = pointerX * 1.5;
-        
-        headRef.current.rotation.x = THREE.MathUtils.lerp(headRef.current.rotation.x, targetHeadX, delta * 6);
-        headRef.current.rotation.y = THREE.MathUtils.lerp(headRef.current.rotation.y, targetHeadY, delta * 6);
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+
+    if (actions && names.length > 0) {
+      // RobotExpressive uses "Idle"
+      const idle = actions['Idle'] || actions[names[0]];
+      if (idle) idle.reset().fadeIn(0.5).play();
     }
 
-    // Body Turn / Interaction
-    if (bodyRef.current && entireRef.current) {
-        let isFullRight = pointerX > 0.6;
-        let targetBodyRotationY = pointerX * 0.5;
-        
-        if (isFullRight) {
-            targetBodyRotationY = 1.2; // Quick turn to look right
-            // Dispatch a custom event to notify React DOM elements that the secret 'About Me' side panel should appear
-            document.dispatchEvent(new CustomEvent('character-look-right', { detail: true }));
-        } else {
-            document.dispatchEvent(new CustomEvent('character-look-right', { detail: false }));
-        }
+    if (group.current) {
+        let tx = viewport.width < 5 ? 0 : - (viewport.width * 0.25);
+        // Phase 3: Scroll transition
+        gsap.to(group.current.position, {
+            x: tx,
+            scrollTrigger: {
+                trigger: "#about",
+                start: "top bottom",
+                end: "bottom center",
+                scrub: true
+            }
+        });
 
-        bodyRef.current.rotation.y = THREE.MathUtils.lerp(bodyRef.current.rotation.y, targetBodyRotationY, delta * 4);
+        // Phase 4: Full body scene / timeline switch
+        ScrollTrigger.create({
+            trigger: "#fullbody",
+            start: "top center",
+            onEnter: () => {
+                if (actions['Walking']) {
+                    actions['Idle']?.fadeOut(0.5);
+                    actions['Walking']?.reset().fadeIn(0.5).play();
+                }
+            },
+            onLeaveBack: () => {
+                if (actions['Walking']) {
+                    actions['Walking']?.fadeOut(0.5);
+                    actions['Idle']?.reset().fadeIn(0.5).play();
+                }
+            }
+        });
+    }
+  }, [actions, names, viewport]);
 
-        // Responsive & Scroll Positional Logic
-        let tx = 0, ty = -2, tz = 0;
-        
-        // Mobile offset fix
-        const isMobile = viewport.width < 5;
-        
-        if (scrollY > 0.05 && scrollY < 0.4) {
-            // About section: shifts left
-            tx = isMobile ? 0 : -(viewport.width * 0.25);
-            ty = -2.5;
-            targetBodyRotationY += 0.5; // turns slightly to right content
-        } else if (scrollY >= 0.4 && scrollY < 0.7) {
-            // "What I Do" section
-            tx = isMobile ? 0 : (viewport.width * 0.25);
-            ty = -3;
-        } else if (scrollY >= 0.7) {
-            // Timeline section: fade down
-            ty = -10;
-        }
+  useFrame((state) => {
+    // Phase 1: Cursor -> Head Movement logic (Using React Three Fiber pointers)
+    const x = state.pointer.x; // Native pointer value -1 to 1 
+    const y = state.pointer.y;
 
-        entireRef.current.position.x = THREE.MathUtils.lerp(entireRef.current.position.x, tx, delta * 3);
-        entireRef.current.position.y = THREE.MathUtils.lerp(entireRef.current.position.y, ty + Math.sin(state.clock.elapsedTime * 2) * 0.05, delta * 3); // Idle breathing applied here
+    targetRotation.current = {
+      x: -y * 0.3,
+      y: x * 0.5,
+    };
+
+    if (headBone) {
+      headBone.rotation.x = THREE.MathUtils.lerp(headBone.rotation.x, targetRotation.current.x, 0.1);
+      headBone.rotation.y = THREE.MathUtils.lerp(headBone.rotation.y, targetRotation.current.y, 0.1);
+    }
+
+    // Phase 2: Detect "Full Right Cursor" -> Trigger Body Rotation & About Section
+    if (x > 0.8 && !showAbout) {
+      setShowAbout(true);
+      if (group.current) {
+        gsap.to(group.current.rotation, { y: Math.PI / 4, duration: 1 });
+      }
+      document.dispatchEvent(new CustomEvent('character-look-right', { detail: true }));
+    } else if (x <= 0.8 && showAbout) {
+      setShowAbout(false);
+      if (group.current) {
+        gsap.to(group.current.rotation, { y: 0, duration: 1 });
+      }
+      document.dispatchEvent(new CustomEvent('character-look-right', { detail: false }));
     }
   });
 
   return (
-    <group ref={entireRef} position={[0, -2, 0]}>
-      <group ref={bodyRef}>
-        {/* Torso / Jacket */}
-        <mesh position={[0, 1.4, 0]}>
-            <capsuleGeometry args={[0.8, 1.5, 4, 16]} />
-            <meshStandardMaterial color="#1e1e1e" roughness={0.7} />
-        </mesh>
-        
-        {/* Head */}
-        <group ref={headRef} position={[0, 3.2, 0]}>
-            <mesh>
-                <sphereGeometry args={[0.9, 32, 32]} />
-                <meshStandardMaterial color="#fcd5ce" roughness={0.4} />
-            </mesh>
-            {/* Eyes */}
-            <mesh position={[-0.35, 0.1, 0.85]}>
-                <sphereGeometry args={[0.08, 16, 16]} />
-                <meshStandardMaterial color="#000" />
-            </mesh>
-            <mesh position={[0.35, 0.1, 0.85]}>
-                <sphereGeometry args={[0.08, 16, 16]} />
-                <meshStandardMaterial color="#000" />
-            </mesh>
-            {/* Cyber Visor detail */}
-            <mesh position={[0, 0.15, 0.9]}>
-                <boxGeometry args={[1.2, 0.25, 0.1]} />
-                <meshStandardMaterial color="#4f46e5" opacity={0.6} transparent emissive="#4f46e5" emissiveIntensity={0.5} />
-            </mesh>
-        </group>
-      </group>
+    <group ref={group} position={[0, -3.5, 0]} scale={1.5}>
+      <primitive object={clone} />
     </group>
   );
 }
+
+useGLTF.preload("/models/character.glb");
